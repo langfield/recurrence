@@ -1,0 +1,26 @@
+cabal-version:      3.0
+name:               recurrence
+version:            0.1.0.0
+author:             Malcolm Langfield
+maintainer:         35980963+langfield@users.noreply.github.com
+build-type:         Simple
+
+common warnings
+    ghc-options: -Wall
+
+executable recurrence
+    import:           warnings
+    main-is:          Main.hs
+    build-depends:
+      ghc             ^>= 9.6.4,
+      base            ^>=4.18.2.0,
+      hspec           ^>= 2.11.8,
+      strict          ^>= 0.5,
+      random          ^>= 1.2.1.2,
+      process         ^>= 1.6.17.0,
+      leancheck       ^>= 1.0.2,
+      containers      ^>= 0.6.7,
+      QuickCheck      ^>= 2.14.3,
+      hspec-leancheck ^>= 0.0.6,
+      leancheck-instances ^>= 0.0.5,
+    default-language: Haskell2010
