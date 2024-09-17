@@ -1,15 +1,27 @@
 module Main where
 
-import Data.Bits (xor)
-import Test.LeanCheck.Utils.Operators ((|||))
-
-import Test.Hspec
+import Conjure
+import Numeric.Natural
+import Test.LeanCheck (Listable, tiers, (==>))
+import Test.LeanCheck.Instances ()
 import qualified Test.Hspec.LeanCheck as LC
-
 import Debug.Trace (trace)
 
 trace' :: Show a => String -> a -> a
 trace' s x = trace (s ++ ": " ++ show x) x
+
+newtype X = X Double deriving (Eq, Ord, Show)
+newtype AB = AB Double deriving (Eq, Ord, Show)
+newtype Positive = Positive Double deriving (Eq, Ord, Show)
+
+instance Listable Positive where
+  tiers = (map . map) (Positive . (+0.000001) . abs) (tiers :: [[Double]])
+
+instance Listable AB where
+  tiers = (map . map) (AB . (1/) . (+1) . (\(Positive x) -> x)) (tiers :: [[Positive]])
+
+instance Listable X where
+  tiers = (map . map) (X . (+1) . (\(Positive x) -> x)) (tiers :: [[Positive]])
 
 -- | Recurrence.
 f :: Double -> Double -> Double -> Double -> Double
@@ -20,47 +32,55 @@ g :: Double -> Double -> Double -> Double -> [Double]
 g a b c = iterate (f a b c)
 
 -- | Nth value of recurrence.
-h :: Double -> Double -> Double -> Double -> Int -> Double
-h a b c x n = g a b c x !! n
+xn :: Double -> Double -> Double -> Double -> Int -> Double
+xn a b c x n = g a b c x !! n
 
-xnor :: Bool -> Bool -> Bool
-xnor u v = not (u `xor` v)
+isFinite :: Double -> Bool
+isFinite x = not (isNaN x) && not (isInfinite x)
 
-bsearch :: Fractional a => (a -> Bool) -> a -> a -> [a]
-bsearch p a b
-  | p a `xnor` p b = []
-  | p m            = a : bsearch p a m
-  | otherwise      = a : bsearch p m b
+lowerBound :: (Double -> Double -> Double -> Double -> Int -> Double) -> AB -> AB -> Positive -> X -> Natural -> Bool
+lowerBound h a b c x n = isFinite c' && isFinite x' ==> xn a' b' c' x' n' <= h a' b' c' x' n'
   where
-    m = (a + b) / 2
+    a' = (\(AB u) -> u) a
+    b' = (\(AB u) -> u) b
+    c' = (\(Positive u) -> u) c
+    x' = (\(X u) -> u) x
+    n' = fromEnum n
 
-diverges :: [Double] -> Bool
-diverges = (isInfinite ||| isNaN) . (!! 10000)
+upperBound :: (Double -> Double -> Double -> Double -> Int -> Double) -> AB -> AB -> Positive -> X -> Natural -> Bool
+upperBound h a b c x n = isFinite c' && isFinite x' ==> h a' b' c' x' n' <= 2 * xn a' b' c' x' n'
+  where
+    a' = (\(AB u) -> u) a
+    b' = (\(AB u) -> u) b
+    c' = (\(Positive u) -> u) c
+    x' = (\(X u) -> u) x
+    n' = fromEnum n
 
-gsearch :: Double -> Double -> (Double, Double) -> [Double]
-gsearch a x0 (lb, ub) = bsearch (diverges . g') lb ub
-  where g' c = g a a c x0
+spec :: (Double -> Double -> Double -> Double -> Int -> Double) -> Bool
+spec h = and
+  [ LC.holds 2000 $ lowerBound h
+  , LC.holds 2000 $ upperBound h
+  , True
+  , True
+  ]
 
--- 2 - 1
--- 3 - 1/2
--- 4 - 1/3
--- 5 - 1/4
+primitives :: [Prim]
+primitives =
+  [ pr (0::Double)
+  , pr (1::Double)
+  , pr (2::Double)
+  , prim "+" ((+) :: Double -> Double -> Double)
+  , prim "*" ((*) :: Double -> Double -> Double)
+  , prim "-" ((-) :: Double -> Double -> Double)
+  , prim "/" ((/) :: Double -> Double -> Double)
+  , prim "(-)" (negate :: Double -> Double)
+  , prim "**" ((**) :: Double -> Double -> Double)
+  ]
 
-lhs :: Double -> Double -> Double -> Double
-lhs a b x = (x**a - 1) * (x**b - 1)
-
-rhs :: Double -> Double -> Double
-rhs d x = (x - 1)**d
+closedForm x y z x' y'  =  x'
 
 main :: IO ()
 main = do
-  mapM_ print $ take 50 $ g 0.5 0.5 0.2 6
-  hspec $ do
-    describe "thing" $ do
-      it "has a lower bound" $
-        LC.property $ \a b ->
-          let a' = trace' "a" $ 1 / (abs a + 1.0000001)
-              b' = trace' "b" $ 1 / (abs b + 1.0000001)
-           in LC.exists 100000 $ \d -> LC.holds 100 $ \x ->
-             let x' = abs x + 1.0000001
-              in lhs a' b' x' >= rhs d x'
+  LC.checkFor 2000 $ lowerBound closedForm
+  LC.checkFor 2000 $ upperBound closedForm
+  conjureFromSpecWith args{maxSize=18} "closedForm" spec primitives

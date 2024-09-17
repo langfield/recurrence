@@ -21,6 +21,7 @@ executable recurrence
       leancheck       ^>= 1.0.2,
       containers      ^>= 0.6.7,
       QuickCheck      ^>= 2.14.3,
+      code-conjure    ^>= 0.5.14,
       hspec-leancheck ^>= 0.0.6,
       leancheck-instances ^>= 0.0.5,
     default-language: Haskell2010
